@@ -92,7 +92,7 @@ export default function App() {
       formData.append("image", document.querySelector('#image-upload').files[0]);
       formData.append("prompt", prompt);
 
-      const response = await fetch("http://localhost:8000/edit-image/", {
+      const response = await fetch("http://localhost:8017/edit-image/", {
         method: "POST",
         body: formData,
       });

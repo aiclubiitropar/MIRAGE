@@ -9,3 +9,6 @@ groq
 torch
 requests
 python-multipart
+diffusers
+transformers
+accelerate
