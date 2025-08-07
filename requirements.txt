@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+pillow
+gradio_client
+opencv-python
+numpy
+groq
+torch
+requests
