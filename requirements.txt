@@ -8,3 +8,4 @@ numpy
 groq
 torch
 requests
+python-multipart
