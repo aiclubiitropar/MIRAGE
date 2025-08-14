@@ -88,8 +88,8 @@ async def edit_image(
 
 @app.get("/")
 def root():
-    return {"message": "MIRAGE FastAPI backend is running."}
+    return FileResponse("index.html")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8017, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")

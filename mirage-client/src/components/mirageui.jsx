@@ -46,6 +46,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
 export default function App() {
   const [theme, setTheme] = useState('dark');
   const [originalImage, setOriginalImage] = useState(null);
+  const [originalFile, setOriginalFile] = useState(null);
   const [prompt, setPrompt] = useState("");
   const [editedImage, setEditedImage] = useState(null);
   const [gallery, setGallery] = useState([]);
@@ -73,13 +74,14 @@ export default function App() {
     if (file) {
       setEditedImage(null);
       setError("");
+      setOriginalFile(file);
       setOriginalImage(URL.createObjectURL(file));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!originalImage || !prompt) {
+    if (!originalFile || !prompt) {
       setError("Please upload an image and provide an editing prompt.");
       return;
     }
@@ -89,17 +91,26 @@ export default function App() {
 
     try {
       const formData = new FormData();
-      formData.append("image", document.querySelector('#image-upload').files[0]);
+      formData.append("image", originalFile);
       formData.append("prompt", prompt);
 
-      const response = await fetch("http://localhost:8017/edit-image/", {
+      console.log("Sending request with:", {
+        image: originalFile.name,
+        prompt: prompt,
+        fileSize: originalFile.size,
+        fileType: originalFile.type
+      });
+
+      const response = await fetch("http://localhost:5000/edit-image/", {
         method: "POST",
         body: formData,
       });
 
+      console.log("Response status:", response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "An API error occurred.");
+        throw new Error(errorData.error || `API error: ${response.status}`);
       }
 
       const blob = await response.blob();
@@ -111,8 +122,8 @@ export default function App() {
       Cookies.set('lastGeneratedImage', imageUrl, { expires: 7 });
 
     } catch (err) {
+      console.error("Error in handleSubmit:", err);
       setError(err.message);
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -139,6 +150,7 @@ export default function App() {
     if (file) {
       setEditedImage(null);
       setError("");
+      setOriginalFile(file);
       setOriginalImage(URL.createObjectURL(file));
     }
   };
@@ -194,7 +206,18 @@ export default function App() {
     .form-label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.5rem; }
     .dark .form-label { color: #d1d5db; }
     
-    .upload-area { margin-top: 0.25rem; display: flex; justify-content: center; padding: 1.25rem 1.5rem; border: 2px dashed var(--border-main); border-radius: 0.375rem; text-align: center; }
+    .upload-area { margin-top: 0.25rem; display: flex; justify-content: center; padding: 1.25rem 1.5rem; border: 2px dashed var(--border-main); border-radius: 0.375rem; text-align: center; cursor: pointer; transition: all 0.3s ease; }
+    .upload-area:hover { border-color: var(--indigo-600); background-color: rgba(79, 70, 229, 0.05); }
+    .upload-area.has-image { padding: 0; border: 2px solid var(--border-main); aspect-ratio: 16 / 9; min-height: 200px; position: relative; }
+    .upload-area.has-image:hover { border-color: var(--indigo-600); }
+    
+    .uploaded-image-preview { width: 100%; height: 100%; position: relative; border-radius: 0.375rem; overflow: hidden; }
+    .preview-image { width: 100%; height: 100%; object-fit: cover; }
+    .upload-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; }
+    .upload-area.has-image:hover .upload-overlay { opacity: 1; }
+    .upload-icon-small { width: 2rem; height: 2rem; color: white; margin-bottom: 0.5rem; }
+    .upload-overlay-text { color: white; font-size: 0.875rem; font-weight: 500; }
+    
     .upload-icon { margin: 0 auto; height: 3rem; width: 3rem; color: var(--gray-400); }
     .upload-text { font-size: 0.875rem; color: var(--gray-500); }
     .dark .upload-text { color: var(--gray-400); }
@@ -223,6 +246,22 @@ export default function App() {
     .image-display-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 1.5rem; }
     @media (min-width: 768px) { .image-display-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem; } }
     @media (min-width: 1024px) { .lg-col-span-3 { grid-column: span 3 / span 3; } }
+    
+    .result-container { display: flex; flex-direction: column; height: fit-content; }
+    .result-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 1rem; text-align: center; color: var(--text-main); }
+    @media (min-width: 640px) { .result-title { font-size: 1.75rem; } }
+    
+    .result-image-box { width: 100%; background-color: var(--bg-card); border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 400px; }
+    @media (min-width: 768px) { .result-image-box { min-height: 500px; } }
+    @media (min-width: 1024px) { .result-image-box { min-height: 600px; } }
+    
+    .result-image { width: 100%; height: 100%; object-fit: contain; max-height: 80vh; }
+    
+    .result-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+    .result-placeholder-content { text-align: center; color: var(--gray-400); padding: 2rem; }
+    .result-placeholder-icon { width: 4rem; height: 4rem; margin: 0 auto 1rem auto; }
+    .result-placeholder-text { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .result-placeholder-hint { font-size: 0.875rem; opacity: 0.8; }
     
     .image-container { display: flex; flex-direction: column; align-items: center; }
     .image-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem; }
@@ -264,6 +303,11 @@ export default function App() {
       transform: scale(1.1);
       transition: transform 0.3s ease, color 0.3s ease;
     }
+
+    .upload-area.has-image.dragging .upload-overlay {
+      opacity: 1;
+      background-color: rgba(79, 70, 229, 0.8);
+    }
   `;
 
   return (
@@ -288,33 +332,46 @@ export default function App() {
                 <p className="panel-subtitle">Upload a photo and tell the AI what to change.</p>
                 <form onSubmit={handleSubmit} className="form">
                   <div>
-                    <label htmlFor="image-upload" className="form-label">1. Upload Image</label>
+                    <label htmlFor="image-upload" className="form-label">
+                      {originalImage ? "1. Uploaded Image (Click to change)" : "1. Upload Image"}
+                    </label>
                     <div
-                      className="upload-area"
+                      className={`upload-area ${originalImage ? 'has-image' : ''}`}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
+                      onClick={() => document.getElementById('image-upload').click()}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <svg className="upload-icon" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <div className="upload-text">
-                          <label htmlFor="image-upload" className="upload-browse">
-                            <span>Upload a file</span>
-                            <input id="image-upload" name="image-upload" type="file" className="sr-only" accept="image/*" onChange={handleImageChange} />
-                          </label>
-                          <span style={{ paddingLeft: '0.25rem' }}>or drag and drop</span>
+                      {originalImage ? (
+                        <div className="uploaded-image-preview">
+                          <img src={originalImage} alt="Uploaded preview" className="preview-image" />
+                          <div className="upload-overlay">
+                            <svg className="upload-icon-small" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="upload-overlay-text">Click to change image</span>
+                          </div>
                         </div>
-                        <p className="upload-hint">PNG, JPG, GIF up to 10MB</p>
-                      </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <svg className="upload-icon" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          <div className="upload-text">
+                            <span className="upload-browse">Upload a file</span>
+                            <span style={{ paddingLeft: '0.25rem' }}>or drag and drop</span>
+                          </div>
+                          <p className="upload-hint">PNG, JPG, GIF up to 10MB</p>
+                        </div>
+                      )}
+                      <input id="image-upload" name="image-upload" type="file" className="sr-only" accept="image/*" onChange={handleImageChange} />
                     </div>
                   </div>
                   <div>
                     <label htmlFor="prompt" className="form-label">2. Describe Your Edit</label>
                     <textarea id="prompt" rows="3" className="prompt-input" placeholder="e.g., 'Make the sky a vibrant sunset', 'Add a cute cat on the sofa'" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
                   </div>
-                  <button type="submit" disabled={loading || !originalImage} className="submit-btn">
+                  <button type="submit" disabled={loading || !originalFile} className="submit-btn">
                     {loading ? (
                       <>
                         <svg className="spinner spinner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -330,16 +387,10 @@ export default function App() {
               </div>
 
               <div className="lg-col-span-3">
-                <div className="image-display-grid">
-                  <div className="image-container">
-                    <h3 className="image-title">Original</h3>
-                    <div className="image-box">
-                      {originalImage ? <img src={originalImage} alt="Original upload" /> : <p className="placeholder-text">Your image will appear here.</p>}
-                    </div>
-                  </div>
-                  <div className="image-container">
-                    <h3 className="image-title">Edited</h3>
-                    <div className="image-box">
+                {originalImage && (
+                  <div className="result-container">
+                    <h3 className="result-title">✨ Generated Result</h3>
+                    <div className="result-image-box">
                       {loading ? (
                         <div className="loading-spinner-box">
                           <svg className="spinner loading-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -348,10 +399,22 @@ export default function App() {
                           </svg>
                           <span>Brewing your image...</span>
                         </div>
-                      ) : editedImage ? <img src={editedImage} alt="Edited result" /> : <p className="placeholder-text">Your masterpiece is on its way.</p>}
+                      ) : editedImage ? (
+                        <img src={editedImage} alt="Edited result" className="result-image" />
+                      ) : (
+                        <div className="result-placeholder">
+                          <div className="result-placeholder-content">
+                            <svg className="result-placeholder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <p className="result-placeholder-text">Your masterpiece will appear here</p>
+                            <p className="result-placeholder-hint">Add a prompt and click "Generate Magic" to start</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

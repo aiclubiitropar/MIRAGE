@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mirage AI Photo Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Exo+2:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary-glow: #00f2ff;
+            --secondary-glow: #d946ef; /* New vibrant magenta */
+            --bg-dark: #0a0a0f;
+            --text-color: #e0e0e0;
+        }
+
+        /* Basic theme setup */
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+
+        /* Canvas for the new animated background */
+        #matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        /* Main content container z-index */
+        .main-container {
+            position: relative;
+            z-index: 2;
+        }
+        
+        /* Glassmorphism Panel Style */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        /* MODIFICATION: Gradient text for the logo - new colors */
+        .mirage-gradient {
+            font-family: 'Orbitron', sans-serif;
+            background: linear-gradient(90deg, var(--primary-glow) 0%, var(--secondary-glow) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
+            text-shadow: 0 0 12px rgba(0, 242, 255, 0.5), 0 0 24px rgba(217, 70, 239, 0.5);
+        }
+
+        /* Spinner animation */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        /* --- Component Styling Overrides --- */
+        
+        .ai-textarea {
+             background: rgba(15, 23, 42, 0.7);
+             border: 1px solid rgba(56, 189, 248, 0.4);
+             transition: all 0.3s ease;
+             resize: none;
+        }
+        .ai-textarea:focus {
+            border-color: var(--primary-glow);
+            box-shadow: 0 0 12px rgba(0, 242, 255, 0.5);
+        }
+
+        /* Result image aspect ratio preservation */
+        .result-image {
+            max-width: 100%;
+            height: auto;
+            max-height: 70vh;
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        #dropzone {
+            border-color: rgba(56, 189, 248, 0.4);
+            transition: all 0.3s ease;
+        }
+        #dropzone:hover {
+            border-color: var(--primary-glow);
+            background: rgba(0, 242, 255, 0.05);
+        }
+        .dragging {
+            border-color: var(--primary-glow) !important;
+            background-color: rgba(0, 242, 255, 0.1);
+            box-shadow: inset 0 0 20px rgba(0, 242, 255, 0.3);
+        }
+
+        .upload-container {
+            height: 510px;
+            min-height: 250px;
+        }
+        
+        .ai-button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            border: none;
+            border-radius: 8px;
+            background-color: #3b82f6;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 14px 0 rgba(0, 118, 255, 0.39);
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .ai-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background-color: #2563eb;
+            box-shadow: 0 6px 20px 0 rgba(0, 118, 255, 0.23);
+        }
+        .ai-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            box-shadow: none;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-glow); }
+    </style>
+</head>
+<body>
+    
+    <canvas id="matrix-bg"></canvas>
+
+    <div class="main-container container mx-auto p-4 sm:p-6 max-w-full min-h-screen flex flex-col">
+        <div class="flex flex-col lg:flex-row items-center justify-between mb-6">
+            <h1 class="text-5xl md:text-6xl font-bold mirage-gradient mb-4 lg:mb-0 text-center w-full">MIRAGE</h1>
+        </div>
+
+        <main class="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1">
+            <div class="glass-panel p-4 lg:col-span-2 h-full overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-100">Edit Your Image</h2>
+                </div>
+
+                <form id="edit-form" class="flex flex-col gap-4 h-[98%]">
+                    <div class="flex-1 flex flex-col">
+                        <label class="block text-sm font-medium text-gray-300 mb-2">1. Upload Image</label>
+                        <div class="upload-container">
+                            <div id="dropzone" class="mt-1 flex justify-center p-4 border-2 border-dashed rounded-md cursor-pointer h-full">
+                                <div id="upload-placeholder" class="text-center flex flex-col justify-center">
+                                    <svg class="mx-auto h-8 w-8 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                                    <p class="mt-2 text-sm text-gray-400">
+                                        <span class="font-medium" style="color: var(--primary-glow);">Click to upload</span> or drag and drop
+                                    </p>
+                                    <p class="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
+                                </div>
+                                <img id="image-preview" src="#" alt="Image preview" class="hidden w-full h-full rounded-md object-contain"/>
+                            </div>
+                        </div>
+                        <input id="image-upload" type="file" class="hidden" accept="image/*">
+                    </div>
+
+                    <div class="mt-auto space-y-4">
+                        <div>
+                            <label for="prompt-input" class="block text-sm font-medium text-gray-300 mb-2">2. Describe Your Edit</label>
+                            <textarea id="prompt-input" rows="4" class="ai-textarea block w-full rounded-lg p-2.5 text-sm text-gray-100 placeholder-gray-400 focus:ring-0" placeholder="e.g., 'Make the sky a vibrant sunset'"></textarea>
+                        </div>
+
+                        <button type="submit" id="submit-btn" class="ai-button w-full mb-2">
+                            <span id="button-text">Generate Magic ✨</span>
+                            <svg id="button-spinner" class="hidden spinner h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </button>
+
+                        <p id="error-msg" class="text-sm text-red-400 text-center h-4"></p>
+                    </div>
+                </form>
+            </div>
+
+            <div class="lg:col-span-3">
+                <div id="result-box" class="w-full h-[calc(100vh-200px)] glass-panel flex items-center justify-center overflow-hidden">
+                </div>
+            </div>
+        </main>
+        
+        <div id="gallery-container" class="mt-6 hidden">
+            <h2 class="text-xl font-bold mb-4 text-center text-gray-200">Creation History</h2>
+            <div id="gallery-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2 max-h-32 overflow-y-auto">
+            </div>
+        </div>
+
+        <footer class="text-center mt-4 py-4 border-t border-cyan-400/20 text-xs text-gray-400">
+            Made by Iota Cluster
+        </footer>
+    </div>
+
+    <script>
+        // --- DOM Element Selection ---
+        const editForm = document.getElementById('edit-form');
+        const dropzone = document.getElementById('dropzone');
+        const imageUploadInput = document.getElementById('image-upload');
+        const uploadPlaceholder = document.getElementById('upload-placeholder');
+        const imagePreview = document.getElementById('image-preview');
+        const promptInput = document.getElementById('prompt-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const buttonText = document.getElementById('button-text');
+        const buttonSpinner = document.getElementById('button-spinner');
+        const errorMsg = document.getElementById('error-msg');
+        const resultBox = document.getElementById('result-box');
+        const galleryContainer = document.getElementById('gallery-container');
+        const galleryGrid = document.getElementById('gallery-grid');
+        
+        // --- State ---
+        let originalFile = null;
+        let originalImageDimensions = { width: 0, height: 0 };
+
+        // --- Placeholders and Loaders ---
+        const resultPlaceholderHTML = `
+            <div class="text-center text-gray-400 p-8">
+                <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                <p class="text-lg font-semibold mb-2">Your masterpiece will appear here</p>
+                <p class="text-sm">Upload an image and provide a prompt to start</p>
+            </div>`;
+
+        const resultLoaderHTML = `
+            <div class="flex flex-col items-center justify-center text-gray-300">
+                <svg class="spinner h-10 w-10 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <span>Brewing your image...</span>
+            </div>`;
+        
+        // --- Core Functions ---
+        function handleFileSelect(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                errorMsg.textContent = 'Please select a valid image file.';
+                return;
+            }
+            originalFile = file;
+            errorMsg.textContent = '';
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = function() {
+                    // Store original dimensions
+                    originalImageDimensions.width = this.naturalWidth;
+                    originalImageDimensions.height = this.naturalHeight;
+                };
+                img.src = e.target.result;
+                
+                imagePreview.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+                uploadPlaceholder.classList.add('hidden');
+                dropzone.classList.remove('p-4');
+                dropzone.classList.add('p-1');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                submitBtn.disabled = true;
+                buttonText.textContent = 'Processing...';
+                buttonSpinner.classList.remove('hidden');
+                resultBox.innerHTML = resultLoaderHTML;
+            } else {
+                submitBtn.disabled = false;
+                buttonText.textContent = 'Generate Magic ✨';
+                buttonSpinner.classList.add('hidden');
+            }
+        }
+        
+        function addToHistory(imageUrl) {
+            galleryContainer.classList.remove('hidden');
+            const galleryItem = document.createElement('div');
+            galleryItem.className = 'aspect-square rounded-lg shadow-md overflow-hidden group border border-cyan-500/20';
+            galleryItem.innerHTML = `<img src="${imageUrl}" alt="Generated history item" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">`;
+            galleryGrid.prepend(galleryItem);
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const promptValue = promptInput.value.trim();
+
+            if (!originalFile || !promptValue) {
+                errorMsg.textContent = 'Please upload an image and provide a prompt.';
+                return;
+            }
+            errorMsg.textContent = '';
+            setLoading(true);
+
+            const formData = new FormData();
+            formData.append('image', originalFile);
+            formData.append('prompt', promptValue);
+
+            try {
+                // IMPORTANT: Replace with your actual API endpoint if different.
+                const response = await fetch('/edit-image/', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `API error: ${response.status}`);
+                }
+
+                const blob = await response.blob();
+                const imageUrl = URL.createObjectURL(blob);
+                
+                // Calculate aspect ratio and apply to result image
+                const aspectRatio = originalImageDimensions.width / originalImageDimensions.height;
+                const containerWidth = resultBox.clientWidth - 32;
+                const containerHeight = resultBox.clientHeight - 32;
+                
+                let displayWidth, displayHeight;
+                
+                // Calculate dimensions while maintaining aspect ratio
+                if (containerWidth / containerHeight > aspectRatio) {
+                    // Container is wider than image aspect ratio - fit by height
+                    displayHeight = containerHeight;
+                    displayWidth = containerHeight * aspectRatio;
+                } else {
+                    // Container is taller than image aspect ratio - fit by width
+                    displayWidth = containerWidth;
+                    displayHeight = containerWidth / aspectRatio;
+                }
+                
+                resultBox.innerHTML = `
+                    <div class="flex items-center justify-center p-4 w-full h-full">
+                        <img src="${imageUrl}" alt="Edited result" 
+                             class="result-image rounded-2xl" 
+                             style="width: ${displayWidth}px; height: ${displayHeight}px; object-fit: contain;">
+                    </div>`;
+                addToHistory(imageUrl);
+
+            } catch (err) {
+                console.error("Submission error:", err);
+                errorMsg.textContent = err.message;
+                resultBox.innerHTML = resultPlaceholderHTML; // Reset on error
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // --- Event Listeners ---
+        dropzone.addEventListener('click', () => imageUploadInput.click());
+        imageUploadInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+        
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragging');
+        });
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragging');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragging');
+            const file = e.dataTransfer.files[0];
+            handleFileSelect(file);
+        });
+        
+        editForm.addEventListener('submit', handleFormSubmit);
+
+        promptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitBtn.click();
+            }
+        });
+
+        // --- Initial State ---
+        resultBox.innerHTML = resultPlaceholderHTML;
+
+
+        // --- JavaScript for Animated Particle Network Background ---
+        const canvas = document.getElementById('matrix-bg');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let mouse = {
+            x: null, y: null, radius: (canvas.height / 120) * (canvas.width / 120)
+        };
+
+        window.addEventListener('mousemove', (event) => { mouse.x = event.x; mouse.y = event.y; });
+        window.addEventListener('touchmove', (event) => {
+            if (event.touches.length > 0) { mouse.x = event.touches[0].clientX; mouse.y = event.touches[0].clientY; }
+        });
+        const resetMouse = () => { mouse.x = null; mouse.y = null; };
+        window.addEventListener('mouseout', resetMouse);
+        window.addEventListener('touchend', resetMouse);
+
+        class Particle {
+            constructor(x, y, dX, dY, size, color) {
+                this.x = x; this.y = y; this.directionX = dX; this.directionY = dY; this.size = size; this.color = color;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+            update() {
+                if (this.x > canvas.width || this.x < 0) this.directionX = -this.directionX;
+                if (this.y > canvas.height || this.y < 0) this.directionY = -this.directionY;
+                this.x += this.directionX; this.y += this.directionY;
+                this.draw();
+            }
+        }
+
+        let particlesArray;
+
+        function init() {
+            particlesArray = [];
+            let num = (canvas.height * canvas.width) / 9000;
+            for (let i = 0; i < num; i++) {
+                let size = (Math.random() * 2) + 1;
+                let x = (Math.random() * ((innerWidth - size * 2) - (size * 2)) + size * 2);
+                let y = (Math.random() * ((innerHeight - size * 2) - (size * 2)) + size * 2);
+                let dX = (Math.random() * 0.4) - 0.2;
+                let dY = (Math.random() * 0.4) - 0.2;
+                particlesArray.push(new Particle(x, y, dX, dY, size, 'rgba(0, 242, 255, 0.5)'));
+            }
+        }
+
+        function connect() {
+            for (let a = 0; a < particlesArray.length; a++) {
+                for (let b = a; b < particlesArray.length; b++) {
+                    let dist = ((particlesArray[a].x - particlesArray[b].x) ** 2) + ((particlesArray[a].y - particlesArray[b].y) ** 2);
+                    if (dist < (canvas.width / 7) * (canvas.height / 7)) {
+                        let opacity = 1 - (dist / 20000);
+                        ctx.strokeStyle = `rgba(0, 242, 255, ${opacity})`;
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
+                        ctx.lineTo(particlesArray[b].x, particlesArray[b].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        let animationFrameId;
+        function animate() {
+            animationFrameId = requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, innerWidth, innerHeight);
+            particlesArray.forEach(p => p.update());
+            connect();
+        }
+        
+        window.addEventListener('resize', () => {
+            cancelAnimationFrame(animationFrameId);
+            canvas.width = innerWidth;
+            canvas.height = innerHeight;
+            mouse.radius = (canvas.height / 120) * (canvas.width / 120);
+            init();
+            animate();
+        });
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
